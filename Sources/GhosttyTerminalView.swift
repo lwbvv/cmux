@@ -1212,7 +1212,38 @@ class GhosttyApp {
         ghostty_config_load_recursive_files(config)
         loadCmuxAppSupportGhosttyConfigIfNeeded(config)
         loadCJKFontFallbackIfNeeded(config)
+        loadClassicLightThemeIfNeeded(config)
         ghostty_config_finalize(config)
+    }
+
+    /// When the user has selected "Classic Light" appearance, inject a default
+    /// `theme = light:…,dark:…` pair so Ghostty switches the terminal surface
+    /// colors along with the app chrome. Loaded before the user's own config
+    /// so an explicit `theme` still wins.
+    private func loadClassicLightThemeIfNeeded(_ config: ghostty_config_t) {
+        let mode = AppearanceSettings.resolvedMode()
+        #if DEBUG
+        dlog("classicLight check mode=\(mode.rawValue)")
+        #endif
+        guard mode == .classicLight else { return }
+        let line = "theme = light:Builtin Light,dark:Ghostty Default Style Dark"
+        let tmpURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cmux-classic-light-theme-\(UUID().uuidString).conf")
+        do {
+            try line.write(to: tmpURL, atomically: true, encoding: .utf8)
+            defer { try? FileManager.default.removeItem(at: tmpURL) }
+            #if DEBUG
+            let contents = try? String(contentsOf: tmpURL, encoding: .utf8)
+            dlog("classicLight injecting theme file: \(tmpURL.path) contents=[\(contents ?? "nil")]")
+            #endif
+            tmpURL.path.withCString { path in
+                ghostty_config_load_file(config, path)
+            }
+        } catch {
+            #if DEBUG
+            Self.initLog("failed to write classic light theme config: \(error)")
+            #endif
+        }
     }
 
     /// When the user has not configured `font-codepoint-map` for CJK ranges,
